@@ -18,39 +18,48 @@
 
 import argparse
 import asyncio
+import contextlib
 import os
 
 import analytics_mcp.coordinator as coordinator
-from mcp.server.lowlevel import NotificationOptions
-from mcp.server.models import InitializationOptions
-import mcp.server
 import mcp.server.stdio
-from mcp.server.streamable_http import streamable_http_server
-
-
-def _init_options():
-    return InitializationOptions(
-        server_name=coordinator.app.name,
-        server_version="1.0.0",
-        capabilities=coordinator.app.get_capabilities(
-            notification_options=NotificationOptions(),
-            experimental_capabilities={},
-        ),
-    )
+import uvicorn
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
 
 async def run_stdio_async():
     """Runs the MCP server over standard I/O."""
     print("Starting MCP Stdio Server:", coordinator.app.name)
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await coordinator.app.run(read_stream, write_stream, _init_options())
+        await coordinator.app.run(
+            read_stream,
+            write_stream,
+            coordinator.app.create_initialization_options(),
+        )
 
 
-async def run_streamable_http_async(host: str, port: int):
+def run_streamable_http(host: str, port: int):
     """Runs the MCP server over streamable HTTP."""
     print(f"Starting MCP Streamable HTTP Server: {coordinator.app.name} on {host}:{port}")
-    async with streamable_http_server(host=host, port=port) as (read_stream, write_stream):
-        await coordinator.app.run(read_stream, write_stream, _init_options())
+
+    session_manager = StreamableHTTPSessionManager(
+        app=coordinator.app,
+        stateless=True,
+    )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        async with session_manager.run():
+            yield
+
+    starlette_app = Starlette(
+        routes=[Mount("/", app=session_manager.handle_request)],
+        lifespan=lifespan,
+    )
+
+    uvicorn.run(starlette_app, host=host, port=port)
 
 
 def run_server():
@@ -62,7 +71,7 @@ def run_server():
     args = parser.parse_args()
 
     if args.transport == "streamable-http":
-        asyncio.run(run_streamable_http_async(args.host, args.port))
+        run_streamable_http(args.host, args.port)
     else:
         asyncio.run(run_stdio_async())
 
