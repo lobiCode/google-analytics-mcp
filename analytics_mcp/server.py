@@ -18,6 +18,7 @@
 
 import argparse
 import asyncio
+import os
 
 import analytics_mcp.coordinator as coordinator
 from mcp.server.lowlevel import NotificationOptions
@@ -56,8 +57,8 @@ def run_server():
     """Synchronous wrapper to run the async MCP server."""
     parser = argparse.ArgumentParser(description="Google Analytics MCP Server")
     parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=9003)
+    parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "9003")))
     args = parser.parse_args()
 
     if args.transport == "streamable-http":
