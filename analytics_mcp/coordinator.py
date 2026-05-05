@@ -111,8 +111,10 @@ def sanitize_mcp_schema_properties(node: dict) -> None:
 # TODO: This is a bug in the ADK and can be removed once it is fixed.
 # https://github.com/google/adk-python/issues/948
 for tool in mcp_tools:
-    # Check if inputSchema is empty
-    if tool.inputSchema == {}:
+    # Check if inputSchema is empty or an object without properties (both rejected by OpenAI)
+    if tool.inputSchema == {} or (
+        tool.inputSchema.get("type") == "object" and "properties" not in tool.inputSchema
+    ):
         tool.inputSchema = {"type": "object", "properties": {}}
     # Fix union type hints generating spurious "type": "null"
     for prop in tool.inputSchema.get("properties", {}).values():
